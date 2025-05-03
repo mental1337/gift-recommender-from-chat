@@ -260,7 +260,7 @@ def analyze_conversation_for_gifts(
     messages: List[tuple[datetime, str]],
     friend_name: str,
     budget_range: str = "any",
-    chunk_size: int = 10
+    chunk_size: int = 600,
 ) -> Dict:
     """
     Complete pipeline to analyze conversations and generate gift recommendations.
