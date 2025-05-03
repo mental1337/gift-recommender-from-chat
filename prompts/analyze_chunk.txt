@@ -1,0 +1,26 @@
+Analyze the following conversation chunk and extract ONLY the specific signals requested. For each category, either provide the exact quote with context or write "None detected" if no signal is present.
+
+CONVERSATION CHUNK:
+"""
+{conversation_chunk}
+"""
+
+EXTRACT THE FOLLOWING:
+
+1. DIRECT WISH SIGNAL: Extract exact quotes where the person explicitly mentions wanting, needing, or wishing for something specific. Include the contextual sentence.
+
+2. PROBLEM STATEMENT: Identify quotes where the person mentions a problem, challenge, or frustration that could potentially be solved with a gift.
+
+3. ENTHUSIASM MARKER: Find quotes showing strong positive emotion about a topic, activity, product, or experience.
+
+4. RECURRING INTEREST: Note any topics, activities, or items mentioned multiple times, showing consistent interest.
+
+5. UPCOMING EVENT: Identify any future events, milestones, or plans the person mentions.
+
+OUTPUT FORMAT:
+For each category found, provide:
+- The exact quote
+- Date of conversation (if available)
+- Brief contextual note
+
+Return ONLY these five categories with their findings or "None detected".
