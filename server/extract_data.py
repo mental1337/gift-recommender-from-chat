@@ -5,6 +5,7 @@ import json
 import re
 import litellm
 from litellm import completion
+from api import GiftRecommendationResponse
 
 class WishSignal(BaseModel):
     item: str = Field(description="The item the person wants")
@@ -258,10 +259,9 @@ def generate_gift_recommendations(
 # Function to create a complete gift intelligence system
 def analyze_conversation_for_gifts(
     messages: List[tuple[datetime, str]],
-    friend_name: str,
     budget_range: str = "any",
     chunk_size: int = 600,
-) -> Dict:
+) -> GiftRecommendationResponse:
     """
     Complete pipeline to analyze conversations and generate gift recommendations.
     
@@ -274,7 +274,7 @@ def analyze_conversation_for_gifts(
     Returns:
         Dictionary with signals and recommendations
     """
-    print(f"Analyzing conversations with {friend_name}...")
+    print(f"Analyzing conversations with...")
     signals = extract_information(messages, chunk_size)
 
     print(f"Extracted signals: {signals.model_dump()}")
@@ -282,11 +282,10 @@ def analyze_conversation_for_gifts(
     print(f"Generating gift recommendations within {budget_range} budget...")
     recommendations = generate_gift_recommendations(signals, budget_range)
     
-    return {
-        "friend_name": friend_name,
-        "signals": signals.model_dump(),
-        "recommendations": recommendations
-    }
+    return GiftRecommendationResponse(
+        notes=signals.model_dump_json(),
+        gift_ideas=recommendations
+    )
 
 # Example usage
 if __name__ == "__main__":
