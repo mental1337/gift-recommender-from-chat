@@ -1,12 +1,10 @@
 from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
-import langchain
-from langchain.chat_models import ChatAnthropic
-from langchain.output_parsers import PydanticOutputParser
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import HumanMessage
-import textwrap
+import json
+import re
+import litellm
+from litellm import completion
 
 class WishSignal(BaseModel):
     item: str = Field(description="The item the person wants")
@@ -76,55 +74,45 @@ def create_conversation_chunks(messages: List[tuple[datetime, str]], chunk_size:
         
     return chunks
 
+def get_format_instructions(model_class: BaseModel) -> str:
+    """
+    Generate format instructions for the model.
+    
+    Args:
+        model_class: Pydantic model class
+        
+    Returns:
+        String with formatting instructions
+    """
+    schema = model_class.model_json_schema()
+    schema_str = json.dumps(schema, indent=2)
+    
+    return f"""
+    Return the data in the following JSON format:
+    
+    {schema_str}
+    
+    Ensure the output is valid JSON that adheres to this schema.
+    """
+
 def extract_information(
     messages: List[tuple[datetime, str]],
-    chunk_size: int = 10
+    chunk_size: int = 10,
+    model: str = "anthropic/claude-3-haiku-20240307"
 ) -> FriendSignals:
     """
-    Process conversation history to extract gift-related signals.
+    Process conversation history to extract gift-related signals using LiteLLM.
     
     Args:
         messages: List of tuples containing (timestamp, message_text)
         chunk_size: Number of messages to process in each chunk
+        model: LLM model to use
         
     Returns:
         FriendSignals object containing all extracted information
     """
-    # Initialize our LangChain components
-    parser = PydanticOutputParser(pydantic_object=FriendSignals)
-    
-    # Create a model instance
-    model = ChatAnthropic(model="claude-3-haiku-20240307")
-    
-    # Create our extraction prompt template
-    template = textwrap.dedent("""
-    You are an AI specializing in analyzing conversations to extract information useful for selecting thoughtful gifts.
-    
-    Analyze the following conversation history and extract specific signals that could help with gift selection.
-    
-    CONVERSATION CHUNK:
-    ```
-    {conversation_chunk}
-    ```
-    
-    For each category below, extract relevant information ONLY if it exists in the text:
-    
-    1. DIRECT WISH SIGNALS: When the person explicitly mentions wanting something
-    2. PROBLEMS: Complaints or frustrations that could be addressed with a gift
-    3. ENTHUSIASM SIGNALS: Topics or activities the person shows excitement about
-    4. VALUES: Personal values that could inform gift selection
-    
-    {format_instructions}
-    
-    If a category has no valid examples in this conversation chunk, return an empty list for that category.
-    Only include items with clear supporting evidence in the conversation.
-    """)
-    
-    # Create the prompt with format instructions
-    prompt = ChatPromptTemplate.from_template(
-        template=template,
-        partial_variables={"format_instructions": parser.get_format_instructions()}
-    )
+    # Format instructions for the model
+    format_instructions = get_format_instructions(FriendSignals)
     
     # Create conversation chunks
     conversation_chunks = create_conversation_chunks(messages, chunk_size)
@@ -135,14 +123,44 @@ def extract_information(
     # Process each chunk
     for chunk in conversation_chunks:
         try:
-            # Format the prompt with the current chunk
-            formatted_prompt = prompt.format_messages(conversation_chunk=chunk)
+            # Craft the prompt
+            prompt = f"""
+            You are an AI specializing in analyzing conversations to extract information useful for selecting thoughtful gifts.
             
-            # Get the response from the LLM
-            response = model.invoke(formatted_prompt)
+            Analyze the following conversation history and extract specific signals that could help with gift selection.
             
-            # Parse the response
-            chunk_signals = parser.parse(response.content)
+            CONVERSATION CHUNK:
+            ```
+            {chunk}
+            ```
+            
+            For each category below, extract relevant information ONLY if it exists in the text:
+            
+            1. DIRECT WISH SIGNALS: When the person explicitly mentions wanting something
+            2. PROBLEMS: Complaints or frustrations that could be addressed with a gift
+            3. ENTHUSIASM SIGNALS: Topics or activities the person shows excitement about
+            4. VALUES: Personal values that could inform gift selection
+            
+            {format_instructions}
+            
+            If a category has no valid examples in this conversation chunk, return an empty list for that category.
+            Only include items with clear supporting evidence in the conversation.
+            """
+            
+            # Get the LLM response using LiteLLM
+            response = litellm.completion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=1500,
+                response_format={"type": "json_object"}
+            )
+            
+            # Extract the content from the response
+            content = response.choices[0].message.content
+            
+            # Parse the response as JSON
+            chunk_signals = FriendSignals.model_validate_json(content)
             
             # Add unique signals from this chunk to our full results
             # Direct wish signals
@@ -185,51 +203,22 @@ def extract_information(
     
     return all_signals
 
-def generate_gift_recommendations(signals: FriendSignals, budget_range: str = "any") -> List[Dict]:
+def generate_gift_recommendations(
+    signals: FriendSignals, 
+    budget_range: str = "any",
+    model: str = "anthropic/claude-3-opus-20240229"
+) -> List[Dict]:
     """
-    Generate gift recommendations based on the extracted signals.
+    Generate gift recommendations based on the extracted signals using LiteLLM.
     
     Args:
         signals: FriendSignals object with extracted information
         budget_range: String indicating budget constraints (e.g., "under $50", "$100-$200")
+        model: LLM model to use
         
     Returns:
         List of gift recommendations with reasoning
     """
-    # Initialize our LangChain components
-    model = ChatAnthropic(model="claude-3-opus-20240229")
-    
-    # Create the recommendation prompt
-    recommendation_template = textwrap.dedent("""
-    Based on the following information extracted from conversations with a friend, 
-    suggest 5 thoughtful gift ideas within a {budget_range} budget.
-    
-    DIRECT WISH SIGNALS:
-    {wish_signals}
-    
-    PROBLEMS THEY'VE MENTIONED:
-    {problems}
-    
-    TOPICS THEY'RE ENTHUSIASTIC ABOUT:
-    {enthusiasm}
-    
-    VALUES THEY CARE ABOUT:
-    {values}
-    
-    For each recommendation:
-    1. Describe the gift
-    2. Explain why it would be meaningful based on the signals
-    3. Rate how well it matches their expressed interests (1-5)
-    4. Suggest personalization options
-    
-    Format each recommendation as a dictionary with these keys:
-    - gift_name: The name of the gift
-    - description: Brief description
-    - reasoning: Why this gift matches their signals
-    - match_score: 1-5 rating of how well it matches
-    - personalization: Ideas to make it more special
-    """)
-    
     # Format the signals for the prompt
     wish_signals_text = "\n".join([f"- {wish.item}: \"{wish.quote}\" (Desire strength: {wish.sentiment_strength}/5)" 
                                  for wish in signals.direct_wish_signals])
@@ -249,56 +238,108 @@ def generate_gift_recommendations(signals: FriendSignals, budget_range: str = "a
     if not enthusiasm_text: enthusiasm_text = "None detected"
     if not values_text: values_text = "None detected"
     
-    # Format the recommendation prompt
-    recommendation_prompt = recommendation_template.format(
-        budget_range=budget_range,
-        wish_signals=wish_signals_text,
-        problems=problems_text,
-        enthusiasm=enthusiasm_text,
-        values=values_text
+    # Craft the recommendation prompt
+    recommendation_prompt = f"""
+    Based on the following information extracted from conversations with a friend, 
+    suggest 5 thoughtful gift ideas within a {budget_range} budget.
+    
+    DIRECT WISH SIGNALS:
+    {wish_signals_text}
+    
+    PROBLEMS THEY'VE MENTIONED:
+    {problems_text}
+    
+    TOPICS THEY'RE ENTHUSIASTIC ABOUT:
+    {enthusiasm_text}
+    
+    VALUES THEY CARE ABOUT:
+    {values_text}
+    
+    For each recommendation:
+    1. Describe the gift
+    2. Explain why it would be meaningful based on the signals
+    3. Rate how well it matches their expressed interests (1-5)
+    4. Suggest personalization options
+    
+    Return a JSON array where each item has these keys:
+    - gift_name: The name of the gift
+    - description: Brief description
+    - reasoning: Why this gift matches their signals
+    - match_score: 1-5 rating of how well it matches
+    - personalization: Ideas to make it more special
+    """
+    
+    # Get gift recommendations using LiteLLM
+    response = litellm.completion(
+        model=model,
+        messages=[{"role": "user", "content": recommendation_prompt}],
+        temperature=0.7,
+        max_tokens=2000,
+        response_format={"type": "json_object"}
     )
     
-    # Get gift recommendations
-    response = model.invoke([HumanMessage(content=recommendation_prompt)])
+    # Extract the content from the response
+    content = response.choices[0].message.content
     
     # Parse the recommendations from the response
-    # This is a simplified parsing approach - in production, you might want to use a more robust parser
     recommendations = []
     try:
-        # Extract the recommendations from the response
-        # This is a simplified approach - assumes properly formatted output
-        import json
-        import re
+        response_json = json.loads(content)
         
-        # Find all dictionaries in the response
-        dict_pattern = r'\{[^{}]*\}'
-        dict_matches = re.findall(dict_pattern, response.content, re.DOTALL)
-        
-        for match in dict_matches:
-            try:
-                recommendation = json.loads(match)
-                recommendations.append(recommendation)
-            except:
-                continue
-                
-        # If no dictionaries found, try to parse the whole response as JSON
-        if not recommendations:
-            try:
-                # Look for a JSON array
-                array_pattern = r'\[\s*\{.*\}\s*\]'
-                array_match = re.search(array_pattern, response.content, re.DOTALL)
-                if array_match:
-                    recommendations = json.loads(array_match.group(0))
-            except:
-                pass
-                
+        # Check if the response has a "recommendations" key or is an array directly
+        if "recommendations" in response_json:
+            recommendations = response_json["recommendations"]
+        elif isinstance(response_json, list):
+            recommendations = response_json
+        else:
+            # Look for any key that contains a list of recommendations
+            for key, value in response_json.items():
+                if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
+                    if "gift_name" in value[0]:
+                        recommendations = value
+                        break
+            
     except Exception as e:
         print(f"Error parsing recommendations: {e}")
         
     return recommendations
 
+# Function to create a complete gift intelligence system
+def analyze_conversation_for_gifts(
+    messages: List[tuple[datetime, str]],
+    friend_name: str,
+    budget_range: str = "any",
+    chunk_size: int = 10
+) -> Dict:
+    """
+    Complete pipeline to analyze conversations and generate gift recommendations.
+    
+    Args:
+        messages: List of tuples containing (timestamp, message_text)
+        friend_name: Name of the friend
+        budget_range: Budget constraint for gift recommendations
+        chunk_size: Number of messages per processing chunk
+        
+    Returns:
+        Dictionary with signals and recommendations
+    """
+    print(f"Analyzing conversations with {friend_name}...")
+    signals = extract_information(messages, chunk_size)
+    
+    print(f"Generating gift recommendations within {budget_range} budget...")
+    recommendations = generate_gift_recommendations(signals, budget_range)
+    
+    return {
+        "friend_name": friend_name,
+        "signals": signals.model_dump(),
+        "recommendations": recommendations
+    }
+
 # Example usage
 if __name__ == "__main__":
+    # Configure LiteLLM (optional)
+    # litellm.set_verbose=True
+    
     # Sample conversation history
     sample_messages = [
         (datetime(2025, 3, 1), "I really want to get into rock climbing but all the gear is so expensive!"),
@@ -313,12 +354,12 @@ if __name__ == "__main__":
         (datetime(2025, 4, 10), "I would love to visit Japan next year. The cherry blossoms look incredible!")
     ]
     
-    # Extract signals
-    signals = extract_information(sample_messages, chunk_size=3)
-    
-    # Generate gift recommendations
-    recommendations = generate_gift_recommendations(signals, budget_range="$20-$100")
+    # Run the complete analysis
+    results = analyze_conversation_for_gifts(
+        messages=sample_messages,
+        friend_name="Alex",
+        budget_range="$20-$100"
+    )
     
     # Print the results
-    import json
-    print(json.dumps(recommendations, indent=2))
+    print(json.dumps(results, indent=2))
