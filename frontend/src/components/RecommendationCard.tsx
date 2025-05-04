@@ -8,25 +8,14 @@ import {
   HStack,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { GiftRecommendation } from '../services/api';
+import { GiftIdea } from '../services/api';
 
 interface RecommendationCardProps {
-  recommendation: GiftRecommendation;
+  recommendation: GiftIdea;
 }
 
 const RecommendationCard = ({ recommendation }: RecommendationCardProps) => {
-  const { name, description, confidence, url } = recommendation;
-  
-  // Format confidence as percentage
-  const confidencePercent = Math.round(confidence * 100);
-  
-  // Determine confidence color based on percentage
-  let confidenceColor = 'green';
-  if (confidencePercent < 50) {
-    confidenceColor = 'red';
-  } else if (confidencePercent < 75) {
-    confidenceColor = 'yellow';
-  }
+  const { name, description, link } = recommendation;
   
   const bgColor = useColorModeValue('white', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -44,15 +33,12 @@ const RecommendationCard = ({ recommendation }: RecommendationCardProps) => {
       <VStack align="start" spacing={2}>
         <HStack justify="space-between" width="100%">
           <Heading fontSize="xl">{name}</Heading>
-          <Badge colorScheme={confidenceColor} px={2} py={1} borderRadius="md">
-            {confidencePercent}% Match
-          </Badge>
         </HStack>
         
         <Text>{description}</Text>
         
-        {url && (
-          <Link href={url} isExternal color="blue.500" fontWeight="medium">
+        {link && (
+          <Link href={link} isExternal color="blue.500" fontWeight="medium">
             View Product →
           </Link>
         )}
