@@ -69,7 +69,7 @@ async def analyze_chat(
         # selected_recommendations = random.sample(MOCK_GIFT_IDEAS, num_recommendations)
         # selected_recommendations.sort(key=lambda x: x.confidence, reverse=True)
         
-        recommendations = await recommend(GiftRecommendationRequest(content=content_str, my_name=user_name, friend_name=friend_name))
+        recommendations = await recommend(GiftRecommendationRequest(messages=content_str, my_name=user_name, friend_name=friend_name))
         return recommendations
 
         # # Return the recommendations

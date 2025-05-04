@@ -20,7 +20,7 @@ import {
   HStack,
 } from '@chakra-ui/react';
 import { FiUpload } from 'react-icons/fi';
-import apiService, { GiftRecommendation } from '../services/api';
+import apiService, { GiftIdea, GiftRecommendations } from '../services/api';
 import RecommendationCard from './RecommendationCard';
 
 const HomePage = () => {
@@ -28,7 +28,7 @@ const HomePage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recommendations, setRecommendations] = useState<GiftRecommendation[]>([]);
+  const [recommendations, setRecommendations] = useState<GiftIdea[]>([]);
   const [userName, setUserName] = useState('');
   const [friendName, setFriendName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -107,9 +107,9 @@ const HomePage = () => {
     
     try {
       const result = await apiService.uploadChatHistory(file, userName, friendName);
-      setRecommendations(result);
+      setRecommendations(result.gift_ideas);
       
-      if (result.length === 0) {
+      if (result.gift_ideas.length === 0) {
         toast({
           title: 'No recommendations found',
           description: 'We couldn\'t generate any recommendations from this chat history. Try uploading a different file.',
