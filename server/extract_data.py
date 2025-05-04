@@ -6,6 +6,7 @@ import re
 import litellm
 from litellm import completion
 from api import GiftIdea, GiftRecommendationResponse
+import asyncio
 
 class WishSignal(BaseModel):
     item: str = Field(description="The item the person wants")
@@ -96,10 +97,54 @@ def get_format_instructions(model_class: BaseModel) -> str:
     Ensure the output is valid JSON that adheres to this schema.
     """
 
-def extract_information(
+
+def process_single_chunk(chunk: str) -> FriendSignals:
+    try:
+        model: str = "claude-3-5-haiku-latest"
+        # Craft the prompt
+        prompt = f"""
+        You are an AI specializing in analyzing conversations to extract information useful for selecting thoughtful gifts.
+        
+        Analyze the following conversation history and extract specific signals that could help with gift selection.
+        
+        CONVERSATION CHUNK:
+        ```
+        {chunk}
+        ```
+        
+        For each category below, extract relevant information ONLY if it exists in the text:
+        
+        1. DIRECT WISH SIGNALS: When the person explicitly mentions wanting something
+
+        If a category has no valid examples in this conversation chunk, return an empty list for that category.
+        Only include items with clear supporting evidence in the conversation.
+        """
+        
+        # Get the LLM response using LiteLLM
+        response = litellm.completion(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=3000,
+            response_format=FriendSignals,
+        )
+        
+        # Extract the content from the response
+        content = response.choices[0].message.content
+        
+        # Parse the response as JSON
+        chunk_signals = FriendSignals.model_validate_json(content)
+        
+        # Add unique signals from this chunk to our full results
+        # Direct wish signals
+        return chunk_signals
+                
+    except Exception as e:
+        print(f"Error processing chunk: {e}")
+
+async def extract_information(
     messages: List[tuple[datetime, str]],
     chunk_size: int = 10,
-    model: str = "claude-3-5-haiku-latest"
 ) -> FriendSignals:
     """
     Process conversation history to extract gift-related signals using LiteLLM.
@@ -120,82 +165,18 @@ def extract_information(
     
     # Initialize the results object
     all_signals = FriendSignals()
+    futs = list[asyncio.Future[FriendSignals]]()
     
     # Process each chunk
     for chunk in conversation_chunks:
-        try:
-            # Craft the prompt
-            prompt = f"""
-            You are an AI specializing in analyzing conversations to extract information useful for selecting thoughtful gifts.
-            
-            Analyze the following conversation history and extract specific signals that could help with gift selection.
-            
-            CONVERSATION CHUNK:
-            ```
-            {chunk}
-            ```
-            
-            For each category below, extract relevant information ONLY if it exists in the text:
-            
-            1. DIRECT WISH SIGNALS: When the person explicitly mentions wanting something
+        futs.append(asyncio.get_running_loop().run_in_executor(None, process_single_chunk, chunk))
+    
+    signals = await asyncio.gather(*futs)
 
-            If a category has no valid examples in this conversation chunk, return an empty list for that category.
-            Only include items with clear supporting evidence in the conversation.
-            """
-            
-            # Get the LLM response using LiteLLM
-            response = litellm.completion(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=3000,
-                response_format=FriendSignals,
-            )
-            
-            # Extract the content from the response
-            content = response.choices[0].message.content
-            
-            # Parse the response as JSON
-            chunk_signals = FriendSignals.model_validate_json(content)
-            
-            # Add unique signals from this chunk to our full results
-            # Direct wish signals
-            for wish in chunk_signals.direct_wish_signals:
-                if wish.quote not in [w.quote for w in all_signals.direct_wish_signals]:
-                    all_signals.direct_wish_signals.append(wish)
-                    
-            # Problems
-            # for problem in chunk_signals.problems:
-            #     if problem.quote not in [p.quote for p in all_signals.problems]:
-            #         all_signals.problems.append(problem)
-                    
-            # Enthusiasm signals - merge by topic
-            # for enthusiasm in chunk_signals.enthusiasm_signals:
-            #     existing = next((e for e in all_signals.enthusiasm_signals if e.topic == enthusiasm.topic), None)
-            #     if existing:
-            #         # Merge quotes and take the higher intensity
-            #         for quote in enthusiasm.quotes:
-            #             if quote not in existing.quotes:
-            #                 existing.quotes.append(quote)
-            #         existing.intensity = max(existing.intensity, enthusiasm.intensity)
-            #     else:
-            #         all_signals.enthusiasm_signals.append(enthusiasm)
-                    
-            # Values - merge by value
-            # for value_indication in chunk_signals.values:
-            #     existing = next((v for v in all_signals.values if v.value == value_indication.value), None)
-            #     if existing:
-            #         # Merge quotes and take the higher intensity
-            #         for quote in value_indication.quotes:
-            #             if quote not in existing.quotes:
-            #                 existing.quotes.append(quote)
-            #         existing.intensity = max(existing.intensity, value_indication.intensity)
-            #     else:
-            #         all_signals.values.append(value_indication)
-                
-        except Exception as e:
-            print(f"Error processing chunk: {e}")
-            continue
+    for chunk_signals in signals:
+        for wish in chunk_signals.direct_wish_signals:
+            if wish.quote not in [w.quote for w in all_signals.direct_wish_signals]:
+                all_signals.direct_wish_signals.append(wish)
     
     return all_signals
 
@@ -257,7 +238,7 @@ def generate_gift_recommendations(
     # Parse the recommendations from the response
 
 # Function to create a complete gift intelligence system
-def analyze_conversation_for_gifts(
+async def analyze_conversation_for_gifts(
     messages: List[tuple[datetime, str]],
     budget_range: str = "any",
     chunk_size: int = 600,
@@ -275,7 +256,7 @@ def analyze_conversation_for_gifts(
         Dictionary with signals and recommendations
     """
     print(f"Analyzing conversations with...")
-    signals = extract_information(messages, chunk_size)
+    signals = await extract_information(messages, chunk_size)
 
     print(f"Extracted signals: {signals.model_dump()}")
     
