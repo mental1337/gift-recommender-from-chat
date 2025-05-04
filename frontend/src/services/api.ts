@@ -38,8 +38,9 @@ const apiService = {
           },
         }
       );
+      console.log('Response from backend:', response.data);
 
-      return response.data.recommendations;
+      return response.data;
     } catch (error) {
       console.error('Error uploading chat history:', error);
       throw error;
