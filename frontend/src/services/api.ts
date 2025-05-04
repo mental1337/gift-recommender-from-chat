@@ -19,18 +19,18 @@ export interface GiftRecommendations {
 const apiService = {
   // Upload chat history file and get gift recommendations
   async uploadChatHistory(
-    file: File, 
-    userName: string, 
+    file: File,
+    userName: string,
     friendName: string
   ): Promise<GiftRecommendations> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_name', userName);
     formData.append('friend_name', friendName);
-    
+
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/analyze-chat`, 
+        `${API_BASE_URL}/api/analyze-chat`,
         formData,
         {
           headers: {
@@ -38,7 +38,7 @@ const apiService = {
           },
         }
       );
-      
+
       return response.data.recommendations;
     } catch (error) {
       console.error('Error uploading chat history:', error);

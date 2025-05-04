@@ -5,7 +5,7 @@ import json
 import re
 import litellm
 from litellm import completion
-from api import GiftRecommendationResponse
+from api import GiftIdea, GiftRecommendationResponse
 
 class WishSignal(BaseModel):
     item: str = Field(description="The item the person wants")
@@ -284,7 +284,7 @@ def analyze_conversation_for_gifts(
     
     return GiftRecommendationResponse(
         notes=signals.model_dump_json(),
-        gift_ideas=recommendations
+        gift_ideas=[GiftIdea(name="", link="", description=recommendations)]
     )
 
 # Example usage
