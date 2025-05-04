@@ -22,7 +22,7 @@ async def root():
 
 async def recommend(request: GiftRecommendationRequest) -> GiftRecommendationResponse:
     messages = parse_whatsapp_messages(request.messages, request.friend_name)
-    recommendations = analyze_conversation_for_gifts(messages)
+    recommendations = await analyze_conversation_for_gifts(messages)
     return recommendations
 
 
