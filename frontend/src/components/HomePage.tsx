@@ -29,6 +29,7 @@ const HomePage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recommendations, setRecommendations] = useState<GiftIdea[]>([]);
+  const [notes, setNotes] = useState<string>('');
   const [userName, setUserName] = useState('');
   const [friendName, setFriendName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,6 +57,7 @@ const HomePage = () => {
       setFile(droppedFile);
       // Reset any previous results
       setRecommendations([]);
+      setNotes('');
       setError(null);
       console.log('File uploaded:', droppedFile.name);
     }
@@ -67,6 +69,7 @@ const HomePage = () => {
       setFile(selectedFile);
       // Reset any previous results
       setRecommendations([]);
+      setNotes('');
       setError(null);
       console.log('File selected:', selectedFile.name);
     }
@@ -104,10 +107,12 @@ const HomePage = () => {
     setIsLoading(true);
     setError(null);
     setRecommendations([]);
+    setNotes('');
     
     try {
       const result = await apiService.uploadChatHistory(file, userName, friendName);
       setRecommendations(result.gift_ideas);
+      setNotes(result.notes);
       
       if (result.gift_ideas.length === 0) {
         toast({
@@ -136,6 +141,8 @@ const HomePage = () => {
   const bgColor = useColorModeValue('gray.50', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const activeBorderColor = useColorModeValue('blue.400', 'blue.300');
+  const notesBgColor = useColorModeValue('blue.50', 'blue.900');
+  const notesBorderColor = useColorModeValue('blue.200', 'blue.700');
 
   return (
     <Container maxW="container.xl" py={10}>
@@ -253,6 +260,23 @@ const HomePage = () => {
             <Heading as="h2" size="lg" mb={4}>
               Gift Recommendations for {friendName}
             </Heading>
+            
+            {notes && (
+              <Box 
+                p={4} 
+                mb={6} 
+                bg={notesBgColor} 
+                borderRadius="md" 
+                borderWidth="1px" 
+                borderColor={notesBorderColor}
+              >
+                <Heading as="h3" size="sm" mb={2}>
+                  Analysis Notes
+                </Heading>
+                <Text whiteSpace="pre-wrap">{notes}</Text>
+              </Box>
+            )}
+            
             <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
               {recommendations.map((recommendation, index) => (
                 <RecommendationCard key={index} recommendation={recommendation} />
