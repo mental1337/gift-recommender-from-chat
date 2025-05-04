@@ -1,4 +1,4 @@
-Sample WhatsApp Chat.txt
+server/__pycache__/**
 # Environment variables
 .env
 .env.*
@@ -49,3 +49,4 @@ frontend/dist/
 
 # Misc
 backend-temp/
+Sample WhatsApp Chat.txt
