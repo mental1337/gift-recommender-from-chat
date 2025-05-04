@@ -21,7 +21,8 @@ def parse_whatsapp_messages(message: str, name: str) -> List[Tuple[datetime, str
         # Split on the first occurrence of " - " to separate timestamp from content
         parts = line.split(" - ", 1)
         if len(parts) != 2:
-            raise ValueError(f"Invalid line: {line}")
+            continue
+            # raise ValueError(f"Invalid line: {line}")
             
         # Parse the date
         try:

@@ -165,13 +165,19 @@ async def extract_information(
     
     # Initialize the results object
     all_signals = FriendSignals()
-    futs = list[asyncio.Future[FriendSignals]]()
+    # futs = list[asyncio.Future[FriendSignals]]()
     
     # Process each chunk
+    signals = []
     for chunk in conversation_chunks:
-        futs.append(asyncio.get_running_loop().run_in_executor(None, process_single_chunk, chunk))
+        print("Processing chunk...")
+        try:
+            signals.append(process_single_chunk(chunk)) # sequential so no rate limit
+        except Exception as e:
+            continue
+        # futs.append(asyncio.get_running_loop().run_in_executor(None, process_single_chunk, chunk))
     
-    signals = await asyncio.gather(*futs)
+    # signals = await asyncio.gather(*futs)
 
     for chunk_signals in signals:
         for wish in chunk_signals.direct_wish_signals:
@@ -229,7 +235,7 @@ def generate_gift_recommendations(
         model=model,
         messages=[{"role": "user", "content": recommendation_prompt}],
         temperature=0.7,
-        max_tokens=100,
+        max_tokens=3000,
     )
     
     # Extract the content from the response
