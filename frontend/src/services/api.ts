@@ -4,11 +4,15 @@ import axios from 'axios';
 const API_BASE_URL = 'http://localhost:8000';
 
 // Define the response type for gift recommendations
-export interface GiftRecommendation {
+export interface GiftIdea {
   name: string;
   description: string;
-  confidence: number;
-  url?: string;
+  link: string;
+}
+
+export interface GiftRecommendations {
+  notes: string;
+  gift_ideas: GiftIdea[];
 }
 
 // API service for communicating with the backend
@@ -18,7 +22,7 @@ const apiService = {
     file: File, 
     userName: string, 
     friendName: string
-  ): Promise<GiftRecommendation[]> {
+  ): Promise<GiftRecommendations> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_name', userName);
