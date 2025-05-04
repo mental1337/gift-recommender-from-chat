@@ -5,6 +5,7 @@ import json
 import re
 import litellm
 from litellm import completion
+from api import GiftRecommendationResponse
 
 class WishSignal(BaseModel):
     item: str = Field(description="The item the person wants")
@@ -33,20 +34,20 @@ class FriendSignals(BaseModel):
         description="Explicit mentions of things the person wants, needs, or wishes for"
     )
     
-    problems: List[ProblemStatement] = Field(
-        default_factory=list,
-        description="Complaints, frustrations, or challenges mentioned that could be addressed by a gift"
-    )
+    # problems: List[ProblemStatement] = Field(
+    #     default_factory=list,
+    #     description="Complaints, frustrations, or challenges mentioned that could be addressed by a gift"
+    # )
     
-    enthusiasm_signals: List[EnthusiasmMarker] = Field(
-        default_factory=list,
-        description="Topics, activities, or items the person shows strong positive emotion about"
-    )
+    # enthusiasm_signals: List[EnthusiasmMarker] = Field(
+    #     default_factory=list,
+    #     description="Topics, activities, or items the person shows strong positive emotion about"
+    # )
 
-    values: List[ValueIndication] = Field(
-        default_factory=list,
-        description="Personal values that could inform thoughtful gift selection"
-    )
+    # values: List[ValueIndication] = Field(
+    #     default_factory=list,
+    #     description="Personal values that could inform thoughtful gift selection"
+    # )
 
 def create_conversation_chunks(messages: List[tuple[datetime, str]], chunk_size: int) -> List[str]:
     """
@@ -68,7 +69,7 @@ def create_conversation_chunks(messages: List[tuple[datetime, str]], chunk_size:
         chunk_text = ""
         for timestamp, message in chunk_messages:
             date_str = timestamp.strftime("%Y-%m-%d")
-            chunk_text += f"[{date_str}] {message}\n\n"
+            chunk_text += f"[{date_str}] {message}\n"
             
         chunks.append(chunk_text)
         
@@ -98,7 +99,7 @@ def get_format_instructions(model_class: BaseModel) -> str:
 def extract_information(
     messages: List[tuple[datetime, str]],
     chunk_size: int = 10,
-    model: str = "anthropic/claude-3-haiku-20240307"
+    model: str = "claude-3-5-haiku-latest"
 ) -> FriendSignals:
     """
     Process conversation history to extract gift-related signals using LiteLLM.
@@ -112,7 +113,7 @@ def extract_information(
         FriendSignals object containing all extracted information
     """
     # Format instructions for the model
-    format_instructions = get_format_instructions(FriendSignals)
+    # format_instructions = get_format_instructions(FriendSignals)
     
     # Create conversation chunks
     conversation_chunks = create_conversation_chunks(messages, chunk_size)
@@ -137,12 +138,7 @@ def extract_information(
             For each category below, extract relevant information ONLY if it exists in the text:
             
             1. DIRECT WISH SIGNALS: When the person explicitly mentions wanting something
-            2. PROBLEMS: Complaints or frustrations that could be addressed with a gift
-            3. ENTHUSIASM SIGNALS: Topics or activities the person shows excitement about
-            4. VALUES: Personal values that could inform gift selection
-            
-            {format_instructions}
-            
+
             If a category has no valid examples in this conversation chunk, return an empty list for that category.
             Only include items with clear supporting evidence in the conversation.
             """
@@ -151,9 +147,9 @@ def extract_information(
             response = litellm.completion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=1500,
-                response_format={"type": "json_object"}
+                temperature=0.3,
+                max_tokens=3000,
+                response_format=FriendSignals,
             )
             
             # Extract the content from the response
@@ -169,33 +165,33 @@ def extract_information(
                     all_signals.direct_wish_signals.append(wish)
                     
             # Problems
-            for problem in chunk_signals.problems:
-                if problem.quote not in [p.quote for p in all_signals.problems]:
-                    all_signals.problems.append(problem)
+            # for problem in chunk_signals.problems:
+            #     if problem.quote not in [p.quote for p in all_signals.problems]:
+            #         all_signals.problems.append(problem)
                     
             # Enthusiasm signals - merge by topic
-            for enthusiasm in chunk_signals.enthusiasm_signals:
-                existing = next((e for e in all_signals.enthusiasm_signals if e.topic == enthusiasm.topic), None)
-                if existing:
-                    # Merge quotes and take the higher intensity
-                    for quote in enthusiasm.quotes:
-                        if quote not in existing.quotes:
-                            existing.quotes.append(quote)
-                    existing.intensity = max(existing.intensity, enthusiasm.intensity)
-                else:
-                    all_signals.enthusiasm_signals.append(enthusiasm)
+            # for enthusiasm in chunk_signals.enthusiasm_signals:
+            #     existing = next((e for e in all_signals.enthusiasm_signals if e.topic == enthusiasm.topic), None)
+            #     if existing:
+            #         # Merge quotes and take the higher intensity
+            #         for quote in enthusiasm.quotes:
+            #             if quote not in existing.quotes:
+            #                 existing.quotes.append(quote)
+            #         existing.intensity = max(existing.intensity, enthusiasm.intensity)
+            #     else:
+            #         all_signals.enthusiasm_signals.append(enthusiasm)
                     
             # Values - merge by value
-            for value_indication in chunk_signals.values:
-                existing = next((v for v in all_signals.values if v.value == value_indication.value), None)
-                if existing:
-                    # Merge quotes and take the higher intensity
-                    for quote in value_indication.quotes:
-                        if quote not in existing.quotes:
-                            existing.quotes.append(quote)
-                    existing.intensity = max(existing.intensity, value_indication.intensity)
-                else:
-                    all_signals.values.append(value_indication)
+            # for value_indication in chunk_signals.values:
+            #     existing = next((v for v in all_signals.values if v.value == value_indication.value), None)
+            #     if existing:
+            #         # Merge quotes and take the higher intensity
+            #         for quote in value_indication.quotes:
+            #             if quote not in existing.quotes:
+            #                 existing.quotes.append(quote)
+            #         existing.intensity = max(existing.intensity, value_indication.intensity)
+            #     else:
+            #         all_signals.values.append(value_indication)
                 
         except Exception as e:
             print(f"Error processing chunk: {e}")
@@ -206,8 +202,8 @@ def extract_information(
 def generate_gift_recommendations(
     signals: FriendSignals, 
     budget_range: str = "any",
-    model: str = "anthropic/claude-3-opus-20240229"
-) -> List[Dict]:
+    model: str = "claude-3-5-haiku-latest"
+) -> str:
     """
     Generate gift recommendations based on the extracted signals using LiteLLM.
     
@@ -223,20 +219,20 @@ def generate_gift_recommendations(
     wish_signals_text = "\n".join([f"- {wish.item}: \"{wish.quote}\" (Desire strength: {wish.sentiment_strength}/5)" 
                                  for wish in signals.direct_wish_signals])
     
-    problems_text = "\n".join([f"- \"{problem.quote}\" (Severity: {problem.severity}/5)" 
-                             for problem in signals.problems])
+    # problems_text = "\n".join([f"- \"{problem.quote}\" (Severity: {problem.severity}/5)" 
+    #                          for problem in signals.problems])
     
-    enthusiasm_text = "\n".join([f"- {enthusiasm.topic} (Intensity: {enthusiasm.intensity}/5)\n  Example: \"{enthusiasm.quotes[0] if enthusiasm.quotes else ''}\"" 
-                               for enthusiasm in signals.enthusiasm_signals])
+    # enthusiasm_text = "\n".join([f"- {enthusiasm.topic} (Intensity: {enthusiasm.intensity}/5)\n  Example: \"{enthusiasm.quotes[0] if enthusiasm.quotes else ''}\"" 
+    #                            for enthusiasm in signals.enthusiasm_signals])
     
-    values_text = "\n".join([f"- {value.value} (Intensity: {value.intensity}/5)\n  Example: \"{value.quotes[0] if value.quotes else ''}\"" 
-                           for value in signals.values])
+    # values_text = "\n".join([f"- {value.value} (Intensity: {value.intensity}/5)\n  Example: \"{value.quotes[0] if value.quotes else ''}\"" 
+    #                        for value in signals.values])
     
     # Handle empty cases
     if not wish_signals_text: wish_signals_text = "None detected"
-    if not problems_text: problems_text = "None detected"
-    if not enthusiasm_text: enthusiasm_text = "None detected"
-    if not values_text: values_text = "None detected"
+    # if not problems_text: problems_text = "None detected"
+    # if not enthusiasm_text: enthusiasm_text = "None detected"
+    # if not values_text: values_text = "None detected"
     
     # Craft the recommendation prompt
     recommendation_prompt = f"""
@@ -245,28 +241,6 @@ def generate_gift_recommendations(
     
     DIRECT WISH SIGNALS:
     {wish_signals_text}
-    
-    PROBLEMS THEY'VE MENTIONED:
-    {problems_text}
-    
-    TOPICS THEY'RE ENTHUSIASTIC ABOUT:
-    {enthusiasm_text}
-    
-    VALUES THEY CARE ABOUT:
-    {values_text}
-    
-    For each recommendation:
-    1. Describe the gift
-    2. Explain why it would be meaningful based on the signals
-    3. Rate how well it matches their expressed interests (1-5)
-    4. Suggest personalization options
-    
-    Return a JSON array where each item has these keys:
-    - gift_name: The name of the gift
-    - description: Brief description
-    - reasoning: Why this gift matches their signals
-    - match_score: 1-5 rating of how well it matches
-    - personalization: Ideas to make it more special
     """
     
     # Get gift recommendations using LiteLLM
@@ -274,43 +248,20 @@ def generate_gift_recommendations(
         model=model,
         messages=[{"role": "user", "content": recommendation_prompt}],
         temperature=0.7,
-        max_tokens=2000,
-        response_format={"type": "json_object"}
+        max_tokens=100,
     )
     
     # Extract the content from the response
-    content = response.choices[0].message.content
+    return response.choices[0].message.content
     
     # Parse the recommendations from the response
-    recommendations = []
-    try:
-        response_json = json.loads(content)
-        
-        # Check if the response has a "recommendations" key or is an array directly
-        if "recommendations" in response_json:
-            recommendations = response_json["recommendations"]
-        elif isinstance(response_json, list):
-            recommendations = response_json
-        else:
-            # Look for any key that contains a list of recommendations
-            for key, value in response_json.items():
-                if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
-                    if "gift_name" in value[0]:
-                        recommendations = value
-                        break
-            
-    except Exception as e:
-        print(f"Error parsing recommendations: {e}")
-        
-    return recommendations
 
 # Function to create a complete gift intelligence system
 def analyze_conversation_for_gifts(
     messages: List[tuple[datetime, str]],
-    friend_name: str,
     budget_range: str = "any",
-    chunk_size: int = 10
-) -> Dict:
+    chunk_size: int = 600,
+) -> GiftRecommendationResponse:
     """
     Complete pipeline to analyze conversations and generate gift recommendations.
     
@@ -323,17 +274,18 @@ def analyze_conversation_for_gifts(
     Returns:
         Dictionary with signals and recommendations
     """
-    print(f"Analyzing conversations with {friend_name}...")
+    print(f"Analyzing conversations with...")
     signals = extract_information(messages, chunk_size)
+
+    print(f"Extracted signals: {signals.model_dump()}")
     
     print(f"Generating gift recommendations within {budget_range} budget...")
     recommendations = generate_gift_recommendations(signals, budget_range)
     
-    return {
-        "friend_name": friend_name,
-        "signals": signals.model_dump(),
-        "recommendations": recommendations
-    }
+    return GiftRecommendationResponse(
+        notes=signals.model_dump_json(),
+        gift_ideas=recommendations
+    )
 
 # Example usage
 if __name__ == "__main__":
