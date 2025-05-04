@@ -23,10 +23,7 @@ async def root():
 async def recommend(request: GiftRecommendationRequest) -> GiftRecommendationResponse:
     messages = parse_whatsapp_messages(request.messages, request.friend_name)
     recommendations = analyze_conversation_for_gifts(messages)
-    return GiftRecommendationResponse(
-        notes=recommendations["notes"],
-        gift_ideas=recommendations["gift_ideas"]
-    )
+    return recommendations
 
 
 @app.post("/api/analyze-chat", response_model=GiftRecommendationResponse)
