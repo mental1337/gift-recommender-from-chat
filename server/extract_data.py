@@ -76,7 +76,7 @@ def create_conversation_chunks(messages: List[tuple[datetime, str]], chunk_size:
         
     return chunks
 
-def get_format_instructions(model_class: BaseModel) -> str:
+def get_format_instructions(model_class: type[BaseModel]) -> str:
     """
     Generate format instructions for the model.
     
@@ -118,6 +118,8 @@ def process_single_chunk(chunk: str) -> FriendSignals:
 
         If a category has no valid examples in this conversation chunk, return an empty list for that category.
         Only include items with clear supporting evidence in the conversation.
+
+        {get_format_instructions(FriendSignals)}
         """
         
         # Get the LLM response using LiteLLM
@@ -126,7 +128,7 @@ def process_single_chunk(chunk: str) -> FriendSignals:
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=3000,
-            response_format=FriendSignals,
+            response_format={"type": "json_object"},
         )
         
         # Extract the content from the response
